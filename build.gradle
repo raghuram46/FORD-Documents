@@ -68,9 +68,9 @@ repositories {
 
         credentials {
 
-            username = 'akedhar@ford.com'
+            username = username
 
-            password = 'cmVmdGtuOjAxOjE3MzI2ODMwNjQ6YXdPU2t2RjBzVFFKaDdXMldPSDhNaFBIenZ6'
+            password = pwd
 
         }
 

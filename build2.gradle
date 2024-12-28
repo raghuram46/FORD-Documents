@@ -36,8 +36,8 @@ repositories {
     maven {
         url 'https://jfrog.ford.com/artifactory/fordpro-maven/'
         credentials {
-            username = 'akedhar@ford.com'
-            password = 'cmVmdGtuOjAxOjE3MzI2ODMwNjQ6YXdPU2t2RjBzVFFKaDdXMldPSDhNaFBIenZ6'
+            username = username
+            password = pwd
         }
 
     }
