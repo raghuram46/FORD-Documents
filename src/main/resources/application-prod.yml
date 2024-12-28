@@ -1,0 +1,7 @@
+serviceBaseUrl: https://api.pd01i.gcp.ford.com/pro/govdeals/managegpc
+iamAuthBaseUrl: https://api.pd01e.gcp.ford.com/pro/auth
+iamRolesBaseUrl: https://api.pd01e.gcp.ford.com/pro/roles
+ffmIssuer: https://FleetAccount.ford.com/account-api
+iam-application-id: 805746a3-51da-40e9-9f93-dd7db89bdb8c
+scope: fc955932-453d-448b-b64e-89b7c0fb7058/.default
+ 

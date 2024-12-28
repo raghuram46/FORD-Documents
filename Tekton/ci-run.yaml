@@ -1,0 +1,73 @@
+apiVersion: tekton.dev/v1beta1
+
+kind: PipelineRun
+
+metadata:
+
+  name: "backend-ci-run-||uid||"
+
+  generateName: "backend-ci-run-||uid||"
+
+spec:
+
+  serviceAccountName: pipeline
+
+  pipelineRef:
+
+    name: gbms-service-finmapping-ci
+
+  params:
+
+    - name: GIT_HEAD_SHA
+
+      value: "||GIT_HEAD_SHA||"
+
+    - name: branch
+
+      value: "||GIT_REF||"
+
+  workspaces:
+
+    - name: source
+
+      volumeClaimTemplate:
+
+        metadata:
+
+          name: pipeline-pvc
+
+        spec:
+
+          accessModes:
+
+            - ReadWriteOnce
+
+          storageClassName: px-repl2-block
+
+          resources:
+
+            requests:
+
+              storage: 3Gi
+
+    - name: source-analysis
+
+      volumeClaimTemplate:
+
+        metadata:
+
+          name: pipeline-pvc
+
+        spec:
+
+          accessModes:
+
+            - ReadWriteOnce
+
+          storageClassName: px-repl2-block
+
+          resources:
+
+            requests:
+
+              storage: 3Gi

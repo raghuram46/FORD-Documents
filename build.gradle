@@ -1,0 +1,333 @@
+buildscript {
+
+    repositories {
+
+        google()
+
+        mavenCentral()
+
+        gradlePluginPortal()
+
+        maven { url https://plugins.gradle.org/m2/ }
+
+    }
+
+}
+
+ 
+
+plugins {
+
+    id 'org.springframework.boot' version '3.1.8'
+
+    id 'io.spring.dependency-management' version '1.0.11.RELEASE'
+
+    id 'java'
+
+    id 'org.sonarqube' version '3.3'
+
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
+
+    id 'io.freefair.lombok' version '6.6.3'
+
+    id 'jacoco'
+
+    id 'info.solidsoft.pitest' version '1.9.0'
+
+}
+
+ 
+
+compileJava {
+
+    sourceCompatibility = '17'
+
+    targetCompatibility = '17'
+
+}
+
+ 
+
+group = 'com.fordpro.cloudrun'
+
+ 
+
+repositories {
+
+    mavenLocal()
+
+    mavenCentral()
+
+    maven { url 'https://repo.spring.io/milestone' }
+
+    maven { url 'https://repo.spring.io/snapshot' }
+
+    maven {
+
+        url 'https://jfrog.ford.com/artifactory/fordpro-maven/'
+
+        credentials {
+
+            username = 'akedhar@ford.com'
+
+            password = 'cmVmdGtuOjAxOjE3MzI2ODMwNjQ6YXdPU2t2RjBzVFFKaDdXMldPSDhNaFBIenZ6'
+
+        }
+
+    }
+
+}
+
+ 
+
+// Define additional configurations for the build
+
+configurations {
+
+    configureEach {
+
+        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
+
+    }
+
+ 
+
+    observabilityProvided
+
+    implementation.extendsFrom observabilityProvided
+
+}
+
+ 
+
+dependencies {
+
+    // Spring Boot starters
+
+    implementation 'org.springframework.boot:spring-boot-starter-actuator:3.2.5'
+
+    implementation 'org.springframework.boot:spring-boot-starter-validation:3.2.5'
+
+    implementation 'org.springframework.boot:spring-boot-starter-webflux:3.4.0'
+
+    implementation 'org.springframework.boot:spring-boot-starter-log4j2:3.2.5'
+
+    implementation('org.springframework.boot:spring-boot-starter-web:3.4.0') {
+
+        exclude group: 'org.springframework', module: 'spring-webmvc'
+
+    }
+
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa:3.2.5'
+
+    implementation 'org.springframework.boot:spring-boot-starter-aop:3.2.5'
+
+ 
+
+    // Third-party libraries
+
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    implementation('com.ford.pro.iam.client:iam-fp-auth-interceptor-library:1.5.27') {
+
+        exclude group: 'com.squareup.okio', module: 'okio'
+
+        exclude group: 'com.squareup.okio', module: 'okio-jvm'
+
+        exclude group: 'org.springframework', module: 'spring-webmvc'
+
+        exclude group: 'org.springframework', module: 'spring-webflux'
+
+        exclude group: 'org.springframework.security', module: 'spring-security-web'
+
+    }
+
+    implementation 'com.google.cloud:spring-cloud-gcp-dependencies:5.2.0'
+
+    implementation 'com.google.cloud:google-cloud-secretmanager:2.54.0'
+
+ 
+
+    // Spring Doc
+
+    implementation 'org.springdoc:springdoc-openapi-starter-common:2.5.0'
+
+    implementation('org.springdoc:springdoc-openapi-starter-webmvc-api:2.5.0') {
+
+        exclude group: 'org.springframework', module: 'spring-webmvc'
+
+    }
+
+ 
+
+    //mail
+
+    implementation 'org.springframework.boot:spring-boot-starter-mail:3.3.1'
+
+ 
+
+    //Database
+
+    //implementation 'org.postgresql:postgresql:42.7.3'
+
+    //implementation 'com.google.cloud.sql:postgres-socket-factory:1.18.0'
+
+    implementation 'com.microsoft.sqlserver:mssql-jdbc'
+
+    implementation group: 'com.ibm.db2', name: 'jcc', version: '11.5.9.0'
+
+ 
+
+    // Spring Integration
+
+    implementation 'org.springframework.integration:spring-integration-core:6.2.4'
+
+ 
+
+    // Observability (provided)
+
+    observabilityProvided('com.ford.protech.observability:springboot-observability-context:3.0.0') {
+
+        exclude group: 'com.squareup.okio', module: 'okio'
+
+        exclude group: 'com.squareup.okio', module: 'okio-jvm'
+
+    }
+
+ 
+
+    // Testing
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test:3.2.5'
+
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+
+ 
+
+    //CVE Patches - overriding transitive dependencies to address fossa CVE's
+
+    implementation('org.apache.tomcat.embed:tomcat-embed-core:10.1.25')
+
+    implementation('org.springframework.security:spring-security-web:6.2.7')
+
+    implementation('org.springframework:spring-webmvc:6.0.23')
+
+ 
+
+    implementation('org.springframework:spring-web:6.0.19')
+
+    implementation('org.springframework:spring-webflux:6.2.0')
+
+    implementation('org.springframework.security:spring-security-core:6.1.8')
+
+    implementation('org.apache.tomcat.embed:tomcat-embed-websocket:11.0.2')
+
+}
+
+ 
+
+apply plugin: 'jacoco'
+
+jacoco {
+
+    toolVersion = "0.8.8"
+
+}
+
+pitest {
+
+    targetClasses = ['com.fordpro.cloudrun.*']
+
+    junit5PluginVersion = '1.0.0'    //or 0.15 for PIT <1.9.0
+
+    useClasspathFile = true
+
+    excludedTestClasses = ['com.fordpro.cloudrun.config.*', 'com.fordpro.cloudrun.utils.*']
+
+    excludedClasses = ['com.fordpro.cloudrun.config.*',
+
+                       'com.fordpro.cloudrun.models.*',
+
+                       'com.fordpro.cloudrun.domain.entity.*',
+
+                       'com.fordpro.cloudrun.domain.entitybase.*',
+
+                       'com.fordpro.cloudrun.optionpricelookup.api.*',
+
+                       'com.fordpro.cloudrun.optionpriceclaim.api.*',
+
+                       'com.fordpro.cloudrun.carryoverclaim.api.*',
+
+                       'com.fordpro.cloudrun.carryoverlookup.api.*',
+
+                       'com.fordpro.cloudrun.utils.*']
+
+}
+
+ext {
+
+    jacocoXml = "${buildDir}/jacoco/results.xml"
+
+}
+
+test {
+
+    useJUnitPlatform()
+
+    finalizedBy jacocoTestReport
+
+}
+
+jacocoTestReport {
+
+    reports {
+
+        xml.enabled true
+
+        xml.destination file(jacocoXml)
+
+        html.destination file("${buildDir}/jacoco-html")
+
+    }
+
+ 
+
+    afterEvaluate {
+
+        classDirectories.setFrom(files(classDirectories.files.collect {
+
+            fileTree(dir: it,
+
+                    exclude: ["**/config/*", "**/entity/*", "**/entitybase/*", "**/models/*", "**/api/*", "**/utils/*", "**/PriceProtectionApplication.class"]
+
+            )
+
+        }))
+
+    }
+
+}
+
+plugins.withType(JacocoPlugin).configureEach {
+
+    tasks["test"].finalizedBy 'jacocoTestReport'
+
+    tasks["test"].finalizedBy 'pitest'
+
+}
+
+ 
+
+tasks['sonarqube'].dependsOn 'build'
+
+tasks.withType(Test).configureEach {
+
+    useJUnitPlatform()
+
+}
+
+tasks.withType(Zip) {
+
+    zip64 true
+
+}

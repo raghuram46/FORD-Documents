@@ -1,0 +1,521 @@
+apiVersion: tekton.dev/v1beta1
+
+kind: Pipeline
+
+metadata:
+
+  labels:
+
+    app: gbms-service-finmapping
+
+  name: "gbms-service-finmapping-cd"
+
+spec:
+
+  params:
+
+    - name: environment
+
+      description: The environment to deploy to (dev,stage,prod)
+
+    - name: apigee_env
+
+      description: The apigee environment to deploy to (preprod,prod)
+
+      default: "pre-prod"
+
+    - name: RELEASE_VERSION
+
+      description: the github commit sha hash value used to link to code
+
+    - name: GCP_PROJECT_ID
+
+    - name: GCS_BUCKET
+
+      default: prj-gbms-d-log-bucket
+
+  finally:
+
+    - name: notify-slack
+
+      params:
+
+        - name: message
+
+          value: "gbms-service-finmapping CD Pipeline was $(tasks.status)"
+
+        - name: slack-channel
+
+          value: C061NHC9YSF
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-slack-bot
+
+ 
+
+    - name: upload-logs
+
+      params:
+
+        - name: PIPELINE_RUN_NAME
+
+          value: $(context.pipelineRun.name)
+
+        - name: PIPELINE_UID
+
+          value: $(context.pipelineRun.uid)
+
+        - name: GCS_BUCKET
+
+          value: $(params.GCS_BUCKET)
+
+        - name: GCP_PROJECT_ID
+
+          value: $(params.GCP_PROJECT_ID)
+
+        - name: OAUTH2_TOKEN
+
+          value: $(tasks.gcp-auth.results.ACCESS_TOKEN)
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-upload-logs
+
+ 
+
+    - name: upload-pipeline-logs-to-datadog
+
+      params:
+
+        - name: PIPELINE_RUN_NAME
+
+          value: $(context.pipelineRun.name)
+
+        - name: PIPELINE_UID
+
+          value: $(context.pipelineRun.uid)
+
+        - name: PIPELINE_NAME
+
+          value: $(context.pipeline.name)
+
+        - name: task-status
+
+          value: $(tasks.status)
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-dd-pipeline-log
+
+ 
+
+    - name: create-deployment
+
+      params:
+
+        - name: repo
+
+          value: gbms-service-finmapping
+
+        - name: ref
+
+          value: "$(params.RELEASE_VERSION)"
+
+        - name: owner
+
+          value: Pro-Tech
+
+        - name: environment
+
+          value: "$(params.environment)"
+
+        - name: description
+
+          value: "deployments of dora"
+
+        - name: task-status
+
+          value: "$(tasks.status)"
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-github-deployment-dora-task
+
+ 
+
+  tasks:
+
+    - name: clone-repo
+
+      taskRef:
+
+        name: gbms-sdt-git-clone
+
+      params:
+
+        - name: url
+
+          value: git@github.ford.com:Pro-Tech/gbms-service-finmapping.git
+
+        - name: revision
+
+          value: "$(params.RELEASE_VERSION)"
+
+      workspaces:
+
+        - name: output
+
+          workspace: source
+
+ 
+
+    - name: gcp-auth
+
+      params:
+
+        - name: GCP_SECRET_NAME
+
+          value: "google-creds-$(params.environment)"
+
+      taskRef:
+
+        name: gbms-sdt-wif-openshift
+
+      runAfter:
+
+        - clone-repo
+
+ 
+
+    - name: terraform-init
+
+      taskRef:
+
+        name: gbms-sdt-terraform-cli-ford
+
+      params:
+
+        - name: SUBDIRECTORY
+
+          value: infrastructure
+
+        - name: OAUTH2_TOKEN
+
+          value: $(tasks.gcp-auth.results.ACCESS_TOKEN)
+
+        - name: ARGS
+
+          value: "init -upgrade -input=false -no-color -backend-config=$(params.environment)/backend.conf"
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+      runAfter:
+
+        - gcp-auth
+
+ 
+
+    - name: terraform-plan
+
+      params:
+
+        - name: SUBDIRECTORY
+
+          value: infrastructure
+
+        - name: OAUTH2_TOKEN
+
+          value: $(tasks.gcp-auth.results.ACCESS_TOKEN)
+
+        - name: ARGS
+
+          value: "plan -var-file=$(params.environment)/terraform.tfvars -lock=false -var image_tag=$(params.RELEASE_VERSION) -input=false -out=tfplan -no-color"
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-terraform-cli-ford
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+      runAfter:
+
+        - terraform-init
+
+ 
+
+    - name: terraform-deploy
+
+      taskRef:
+
+        name: gbms-sdt-terraform-cli-ford
+
+      params:
+
+        - name: SUBDIRECTORY
+
+          value: infrastructure
+
+        - name: OAUTH2_TOKEN
+
+          value: $(tasks.gcp-auth.results.ACCESS_TOKEN)
+
+        - name: ARGS
+
+          value: "apply -auto-approve -no-color tfplan"
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+      runAfter:
+
+        - terraform-plan
+
+ 
+
+    - name: write-terraform-output
+
+      params:
+
+        - name: SUBDIRECTORY
+
+          value: "infrastructure"
+
+        - name: OAUTH2_TOKEN
+
+          value: $(tasks.gcp-auth.results.ACCESS_TOKEN)
+
+        - name: OUTPUT_VARIABLE
+
+          value: "cloud_run_url"
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-terraform-outputs-ford
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+      runAfter:
+
+        - terraform-deploy
+
+ 
+
+    - name: api-publish
+
+      params:
+
+        - name: api-publisher-credentials
+
+          value: finmappinghandler-publishing-creds-$(params.apigee_env)
+
+        - name: swagger-file-path
+
+          value: "swagger.json"
+
+        - name: backend-host
+
+          value: $(tasks.write-terraform-output.results.TERRAFORM_OUTPUT)
+
+        - name: publishing-env
+
+          value: "$(params.environment)"
+
+        - name: backend-security-type
+
+          value: "FORD_PRO"
+
+        - name: externally-available
+
+          value: "false"
+
+        - name: append-base-path-to-backend-host
+
+          value: "false"
+
+        - name: debug
+
+          value: "true"
+
+        - name: unauthenticated-endpoints
+
+          value: "/actuator/health,/public,/api-docs"
+
+        - name: rate-limit-enabled
+
+          value: "true"
+
+        - name: number-of-calls-allowed
+
+          value: "60000"
+
+      taskRef:
+
+        name: gbms-sdt-api-publish
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+      runAfter:
+
+        - write-terraform-output
+
+    - name: wait-for-update
+
+      taskSpec:
+
+        steps:
+
+          - name: sleep
+
+            image: "registry.ford.com/pro-tech-software-delivery-toolset/alpine:3.15.0"
+
+            workingDir: /tekton/home
+
+            script: |
+
+              #!/usr/bin/env sh
+
+              echo "I am supposed to sleep for 60 seconds to allow for our API to update!"
+
+              sleep 60
+
+      runAfter:
+
+        - api-publish
+
+#     TODO:Commenting the below tasks as this is for Azure AD and we need to found out for ADFS
+
+#    - name: get-azure-auth-token
+
+#      taskRef:
+
+#        name: gbms-sdt-get-azure-token
+
+#      params:
+
+#        - name: azure-credentials
+
+#          value: azure-credentials #TODO: Update or create this secret if it doesnt exist
+
+#      workspaces:
+
+#        - name: source
+
+#          workspace: source
+
+#      runAfter:
+
+#        - api-publish  #to guarantee this runs without expiring
+
+#    - name: conformance-scan
+
+#      taskRef:
+
+#        name: gbms-sdt-42crunch-conformance-scan
+
+#      params:
+
+#        - name: api-id
+
+#          value: CHANGE_THIS_TO_YOUR_API_ID #TODO: Change this to your 42Crunch API Id
+
+#        - name: swagger-file-path
+
+#          value: "swagger.json"
+
+#        - name: conformance-scan-credentials
+
+#          value: conformance-scan-credentials-gbms-service-finmapping
+
+#        - name: auth-token
+
+#          value: $(tasks.get-azure-auth-token.results.AZURE_TOKEN)
+
+#      workspaces:
+
+#        - name: source
+
+#          workspace: source
+
+#      runAfter:
+
+#        - wait-for-update
+
+#        - get-azure-auth-token
+
+#    - name: load-test
+
+#      when:
+
+#        - input: $(params.environment)
+
+#          operator: in
+
+#          values:
+
+#            - "stage"
+
+#      taskRef:
+
+#        name: gbms-sdt-artillery-load-test-task
+
+#      params:
+
+#        - name: api-name
+
+#          value: TODO-CHANGE-VALUE
+
+#        - name: load-test-config-path
+
+#          value: artillery-load-test.yaml
+
+#        - name: auth-token
+
+#          value: $(tasks.get-azure-auth-token.results.AZURE_TOKEN)
+
+#      runAfter:
+
+#        - wait-for-update
+
+#        - get-azure-auth-token
+
+#      workspaces:
+
+#        - name: source
+
+#          workspace: source
+
+  workspaces:
+
+    - name: source

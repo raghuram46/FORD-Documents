@@ -1,0 +1,325 @@
+apiVersion: tekton.dev/v1beta1
+
+kind: Pipeline
+
+metadata:
+
+  labels:
+
+    app: gbms-service-finmapping
+
+  name: "gbms-service-finmapping-cd-promote"
+
+spec:
+
+  description: Continuous delivery pipeline gbms-service-finmapping (terraform)
+
+ 
+
+  params:
+
+    - name: environment
+
+      default: stage
+
+      description: the environment you want to deploy to (dev,stage or prod)
+
+    - name: RELEASE_VERSION
+
+      description: the GitHub RELEASE_VERSION
+
+    - name: GCP_PROJECT_ID
+
+      description: "the project Id of project you want to promote to (stage: ford-cd2cfb885c46565e38ece16a, prod: ford-19901234a14fe6611ebee34e)"
+
+      default: ford-cd2cfb885c46565e38ece16a
+
+ 
+
+  tasks:
+
+    - name: gcp-auth-promote
+
+      params:
+
+        - name: GCP_SECRET_NAME
+
+          value: "google-creds-$(params.environment)"
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-wif-openshift
+
+ 
+
+    - name: gcp-auth-dev
+
+      params:
+
+        - name: GCP_SECRET_NAME
+
+          value: "google-creds-dev"
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-wif-openshift
+
+ 
+
+    - name: gar-promotion-stage
+
+      when:
+
+        - input: $(params.environment)
+
+          operator: in
+
+          values:
+
+            - "stage"
+
+      taskRef:
+
+        name: gbms-sdt-gar-promotion
+
+      params:
+
+        - name: IMAGE_NAME
+
+          value: "gbms-service-finmapping-image"
+
+        - name: IMAGE_TAG
+
+          value: "$(params.RELEASE_VERSION)"
+
+        - name: REPO_NAME
+
+          value: "ford-container-images"
+
+        - name: GAR_REGION
+
+          value: "us-central1-docker.pkg.dev"
+
+        - name: GCP_PROJECT_CURRENT
+
+          value: ford-98c7a7c4ae422d8715b5e5fd
+
+        - name: GCP_PROJECT_PROMOTE
+
+          value: ford-cd2cfb885c46565e38ece16a
+
+        - name: OAUTH2_TOKEN_CURRENT
+
+          value: $(tasks.gcp-auth-dev.results.ACCESS_TOKEN)
+
+        - name: OAUTH2_TOKEN_PROMOTE
+
+          value: $(tasks.gcp-auth-promote.results.ACCESS_TOKEN)
+
+      runAfter:
+
+        - gcp-auth-promote
+
+        - gcp-auth-dev
+
+ 
+
+    - name: gar-promotion-prod
+
+      when:
+
+        - input: $(params.environment)
+
+          operator: in
+
+          values:
+
+            - "prod"
+
+      taskRef:
+
+        name: gbms-sdt-gar-promotion
+
+      params:
+
+        - name: IMAGE_NAME
+
+          value: "gbms-service-finmapping-image"
+
+        - name: IMAGE_TAG
+
+          value: "$(params.RELEASE_VERSION)"
+
+        - name: REPO_NAME
+
+          value: "ford-container-images"
+
+        - name: GAR_REGION
+
+          value: "us-central1-docker.pkg.dev"
+
+        - name: GCP_PROJECT_CURRENT
+
+          value: ford-98c7a7c4ae422d8715b5e5fd
+
+        - name: GCP_PROJECT_PROMOTE
+
+          value: ford-cd2cfb885c46565e38ece16a
+
+        - name: OAUTH2_TOKEN_CURRENT
+
+          value: $(tasks.gcp-auth-dev.results.ACCESS_TOKEN)
+
+        - name: OAUTH2_TOKEN_PROMOTE
+
+          value: $(tasks.gcp-auth-promote.results.ACCESS_TOKEN)
+
+      runAfter:
+
+        - gcp-auth-promote
+
+        - gcp-auth-dev
+
+ 
+
+  finally:
+
+ 
+
+    - name: trigger-cd-promotion
+
+      when:
+
+        - input: $(tasks.status)
+
+          operator: in
+
+          values:
+
+            - Succeeded
+
+            - Completed
+
+      params:
+
+        - name: RELEASE_VERSION
+
+          value: $(params.RELEASE_VERSION)
+
+        - name: environment
+
+          value: $(params.environment)
+
+        - name: GCP_PROJECT_ID
+
+          value: $(params.GCP_PROJECT_ID)
+
+ 
+
+      taskSpec:
+
+        params:
+
+          - name: RELEASE_VERSION
+
+            type: string
+
+            description: Name of image tag to push to env to
+
+          - name: environment
+
+            type: string
+
+            description: environment
+
+          - name: GCP_PROJECT_ID
+
+            type: string
+
+ 
+
+        steps:
+
+          - env:
+
+              - name: GITHUB_TOKEN
+
+                valueFrom:
+
+                  secretKeyRef:
+
+                    key: password
+
+                    name: github-https
+
+            name: kubectl
+
+            image: registry.ford.com/pro-tech-software-delivery-toolset/debug:latest
+
+            script: |
+
+              #!/bin/bash
+
+              set -e
+
+             
+
+              echo $(params.RELEASE_VERSION)
+
+ 
+
+              cdurl=https://github.ford.com/api/v3/repos/Pro-Tech/gbms-service-finmapping/contents/.pipelines/cd.yaml?ref=$(params.RELEASE_VERSION)
+
+              cdrurl=https://github.ford.com/api/v3/repos/Pro-Tech/gbms-service-finmapping/contents/.pipelines/cd-run.yaml?ref=$(params.RELEASE_VERSION)
+
+ 
+
+              echo $cdurl
+
+              echo $cdrurl
+
+ 
+
+              curl -H "Authorization: token $(echo $GITHUB_TOKEN | tr -d '[:space:]')" -H 'Accept: application/vnd.github.v3.raw' $cdurl -o cd.yaml --http1.1
+
+              curl -H "Authorization: token $(echo $GITHUB_TOKEN | tr -d '[:space:]')" -H 'Accept: application/vnd.github.v3.raw' $cdrurl -o cd-run.yaml --http1.1
+
+ 
+
+              kubectl apply -f cd.yaml
+
+              EXIT_CODE=0
+
+              tkn pr delete gbms-service-finmapping-cd-run || EXIT_CODE=$?
+
+              echo "tkn cleanup result: $EXIT_CODE"
+
+             
+
+              sed -i "s/||RELEASE_VERSION||/$(params.RELEASE_VERSION)/" cd-run.yaml
+
+              sed -i "s/||ENVIRONMENT||/$(params.environment)/" cd-run.yaml
+
+              sed -i "s/||GCP_PROJECT_ID||/$(params.GCP_PROJECT_ID)/" cd-run.yaml
+
+             
+
+              if [[ $(params.environment) == "stage" ]]; then
+
+                sed -i "s/||APIGEE_ENV||/pre-prod/" cd-run.yaml    
+
+              elif [[ $(params.environment) == "prod" ]]; then
+
+                sed -i "s/||APIGEE_ENV||/prod/" cd-run.yaml
+
+              fi              
+
+             
+
+              kubectl create -f cd-run.yaml
+
+ 

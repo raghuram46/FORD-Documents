@@ -1,0 +1,63 @@
+apiVersion: tekton.dev/v1beta1
+
+kind: PipelineRun
+
+metadata:
+
+  name: "gbms-service-finmapping-cd-run"
+
+  generateName: "gbms-service-finmapping-cd-run-"
+
+spec:
+
+  serviceAccountName: pipeline
+
+  pipelineRef:
+
+    name: "gbms-service-finmapping-cd"
+
+  params:
+
+    - name: RELEASE_VERSION
+
+      value: "||RELEASE_VERSION||"
+
+    - name: environment
+
+      value: "||ENVIRONMENT||"
+
+    - name: apigee_env
+
+      value: "||APIGEE_ENV||"
+
+    - name: GCP_PROJECT_ID
+
+      value: "||GCP_PROJECT_ID||"
+
+  workspaces:
+
+    - name: source
+
+      volumeClaimTemplate:
+
+        metadata:
+
+          name: pipeline-pvc
+
+        spec:
+
+          accessModes:
+
+            - ReadWriteOnce
+
+          storageClassName: px-repl2-block
+
+          resources:
+
+            requests:
+
+              storage: 4Gi
+
+ 
+
+ 

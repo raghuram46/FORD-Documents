@@ -1,0 +1,63 @@
+## Configuration / Set up of new repository pipelines in Tekton
+
+ 
+
+- Install the SDT if you haven't following their documentation [here](https://github.ford.com/Pro-Tech/software-delivery-toolset#software-delivery-toolset).
+
+- Log into your Tekton namespace - and run oc apply -f .pipelines/el.yaml to apply the triggers and new eventlisteners in tekton
+
+ 
+
+- Grab your new webhook for your pipeline in tekton by checking out the new route created
+
+```
+
+kubectl get route gbms-service-finmapping-webhook -o json | jq -r .spec.host
+
+```
+
+- Add the newly created webhook to github to enable your pipelines (add it as a git hook)
+
+    - make sure you select the payload type as application/json
+
+    - grab the value from the secret github-hook-secret in tekton and paste it into the secret input in your github hook
+
+```
+
+kubectl get secret github-hook-secret -o json | jq -r .data.secretToken | base64 -d && echo ""
+
+```
+
+- Add your proxy account user as a repository contributor with write permissions
+
+- List of secrets that will need to be created / values that need to be updated - their files can be found in the repository [here](./.pipelines/secrets):
+
+    - Fossa Secret: `sdt-fossa-api-key` - ci.yaml. For information on how to obtain one click [here](https://github.ford.com/Pro-Tech/software-delivery-toolset/blob/main/docs/tasks/fossa-task.md).
+
+    - Checkmarx Secret: `sdt-checkmarx-auth` - ci.yaml. For information on how to obtain one click [here](https://github.ford.com/Pro-Tech/software-delivery-toolset/blob/main/docs/tasks/sdt-checkmarx-task.md).
+
+    - Sonarqube Secret: `sdt-sonarqube-token` - ci.yaml. For information on how to obtain one click [here](https://github.ford.com/Pro-Tech/software-delivery-toolset/blob/main/docs/tasks/sdt-sonarqube-scanner-task.md)
+
+    - Conformance Scan Credentials: `conformance-scan-credentials` - cd.yaml. For information on how to obtain one click [here](https://github.ford.com/Pro-Tech/software-delivery-toolset/blob/main/docs/tasks/sdt-42crunch-conformance-scan-task.md#prerequisite-set-up)
+
+    - API Publishing Credentials: `api-publishing-credentials` - cd.yaml. For information on how to obtain one click [here](https://github.ford.com/Pro-Tech/software-delivery-toolset/blob/main/docs/tasks/sdt-api-publish-task.md)
+
+    - Azure Credentials: `azure-credentials` - cd.yaml. For information on how to obtain one click [here](https://github.ford.com/Pro-Tech/software-delivery-toolset/blob/main/docs/tasks/sdt-get-azure-token.md)
+
+    - Jfrog Credentials: `sdt-jfrog` - ci.yaml. For information on how to obtain one click [here](https://github.ford.com/Pro-Tech/software-delivery-toolset/blob/main/docs/tasks/sdt-gradlew-jfrog-task.md#secret)
+
+ 
+
+- Go through the pipeline files ci.yaml and cd.yaml and verify all of your parameter inputs are correct
+
+- Make sure you have gcp buckets set up
+
+- Add a secret with name `otel-collector-service-authorization` and value `Authorization=Basic <Key>` to Google Secret Manager for each of your environments. New teams can request one from [#protech-observability](https://ford-pro.slack.com/archives/C04MQBR025C)
+
+    - Your Cloud Run will log using observability context library which leverages a centrally managed Open Telemetry (otel) service that the Observability team manages. There is authentication set in place between the service and
+
+      your cloud run and the Observability team can distribute to you a prod and pre-prod key that you would set in Google Secret Manager through the UI.
+
+ 
+
+ 

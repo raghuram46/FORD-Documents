@@ -1,0 +1,671 @@
+apiVersion: tekton.dev/v1beta1
+
+kind: Pipeline
+
+metadata:
+
+  labels:
+
+    app: gbms-service-finmapping
+
+  name: "gbms-service-finmapping-ci"
+
+spec:
+
+  params:
+
+    - name: GIT_HEAD_SHA
+
+      type: string
+
+      description: "The commit id this pipeline will run on"
+
+    - name: gar
+
+      type: string
+
+      default: "us-central1-docker.pkg.dev/ford-98c7a7c4ae422d8715b5e5fd/ford-container-images"
+
+      description: "The repo"
+
+    - name: GIT-REPO-FULL-NAME
+
+      description: github repo name
+
+      type: string
+
+      default: gbms-service-finmapping
+
+    - name: GCP_PROJECT_ID
+
+      default: ford-98c7a7c4ae422d8715b5e5fd
+
+    - name: GCS_BUCKET
+
+      default: prj-gbms-d-log-bucket
+
+    - name: branch
+
+      type: string
+
+      description: the branch that your project is currently referencing
+
+    - name: cluster
+
+      type: string
+
+      description: "pd125 or pd303"
+
+      default: pd125
+
+  finally:
+
+    - name: notify-slack
+
+      params:
+
+        - name: message
+
+          value: "gbms-service-finmapping CI Pipeline $(tasks.status)"
+
+        - name: slack-channel
+
+          value: C061NHC9YSF
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-slack-bot
+
+    - name: upload-logs
+
+      params:
+
+        - name: PIPELINE_RUN_NAME
+
+          value: $(context.pipelineRun.name)
+
+        - name: PIPELINE_UID
+
+          value: $(context.pipelineRun.uid)
+
+        - name: GCS_BUCKET
+
+          value: $(params.GCS_BUCKET)
+
+        - name: GCP_PROJECT_ID
+
+          value: $(params.GCP_PROJECT_ID)
+
+        - name: OAUTH2_TOKEN
+
+          value: $(tasks.gcp-auth.results.ACCESS_TOKEN)
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-upload-logs
+
+    - name: upload-pipeline-logs-to-datadog
+
+      params:
+
+        - name: PIPELINE_RUN_NAME
+
+          value: $(context.pipelineRun.name)
+
+        - name: PIPELINE_UID
+
+          value: $(context.pipelineRun.uid)
+
+        - name: PIPELINE_NAME
+
+          value: $(context.pipeline.name)
+
+        - name: task-status
+
+          value: $(tasks.status)
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-dd-pipeline-log
+
+    - name: notify-pipeline-success
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-github-set-status
+
+      when:
+
+        - input: $(tasks.status)
+
+          operator: in
+
+          values:
+
+            - Succeeded
+
+            - Completed
+
+      params:
+
+        - name: git-repo-full-name
+
+          value: $(params.GIT-REPO-FULL-NAME)
+
+        - name: github-token-secret-name
+
+          value: "github-https"
+
+        - name: github-token-secret-key
+
+          value: "password"
+
+        - name: github-sha
+
+          value: $(params.GIT_HEAD_SHA)
+
+        - name: target-url
+
+          value: [https://console-openshift-console.apps.$(params.cluster).caas.gcp.ford.com/k8s/ns/$(context.pipelineRun.namespace)/tekton.dev~v1beta1~PipelineRun/$(context.pipelineRun.name)]https://console-openshift-console.apps.$(params.cluster).caas.gcp.ford.com/k8s/ns/$(context.pipelineRun.namespace)/tekton.dev~v1beta1~PipelineRun/$(context.pipelineRun.name)
+
+        - name: description
+
+          value: "Pipeline completed successfully"
+
+        - name: state
+
+          value: "success"
+
+        - name: verbose
+
+          value: "true"
+
+    - name: notify-pipeline-failure
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-github-set-status
+
+      when:
+
+        - input: $(tasks.status)
+
+          operator: in
+
+          values:
+
+            - Failed
+
+      params:
+
+        - name: git-repo-full-name
+
+          value: $(params.GIT-REPO-FULL-NAME)
+
+        - name: github-token-secret-name
+
+          value: "github-https"
+
+        - name: github-token-secret-key
+
+          value: "password"
+
+        - name: github-sha
+
+          value: $(params.GIT_HEAD_SHA)
+
+        - name: target-url
+
+          value: [https://console-openshift-console.apps.$(params.cluster).caas.gcp.ford.com/k8s/ns/$(context.pipelineRun.namespace)/tekton.dev~v1beta1~PipelineRun/$(context.pipelineRun.name)]https://console-openshift-console.apps.$(params.cluster).caas.gcp.ford.com/k8s/ns/$(context.pipelineRun.namespace)/tekton.dev~v1beta1~PipelineRun/$(context.pipelineRun.name)
+
+        - name: description
+
+          value: "Pipeline failed"
+
+        - name: state
+
+          value: "failure"
+
+        - name: verbose
+
+          value: "true"
+
+  tasks:
+
+    - name: notify-pipeline-start
+
+      taskRef:
+
+        kind: Task
+
+        name: gbms-sdt-github-set-status
+
+      params:
+
+        - name: git-repo-full-name
+
+          value: $(params.GIT-REPO-FULL-NAME)
+
+        - name: github-token-secret-name
+
+          value: "github-https"
+
+        - name: github-token-secret-key
+
+          value: "password"
+
+        - name: github-sha
+
+          value: $(params.GIT_HEAD_SHA)
+
+        - name: target-url
+
+          value: [https://console-openshift-console.apps.$(params.cluster).caas.gcp.ford.com/k8s/ns/$(context.pipelineRun.namespace)/tekton.dev~v1beta1~PipelineRun/$(context.pipelineRun.name)]https://console-openshift-console.apps.$(params.cluster).caas.gcp.ford.com/k8s/ns/$(context.pipelineRun.namespace)/tekton.dev~v1beta1~PipelineRun/$(context.pipelineRun.name)
+
+        - name: description
+
+          value: "Pipeline has started"
+
+        - name: verbose
+
+          value: "true"
+
+        - name: state
+
+          value: "pending"
+
+    - name: clone-repo
+
+      taskRef:
+
+        name: "gbms-sdt-git-clone"
+
+      params:
+
+        - name: url
+
+          value: git@github.ford.com:Pro-Tech/gbms-service-finmapping.git
+
+        - name: revision
+
+          value: $(params.GIT_HEAD_SHA)
+
+      workspaces:
+
+        - name: output
+
+          workspace: source
+
+    - name: clone-repo-analysis
+
+      taskRef:
+
+        name: gbms-sdt-git-clone
+
+      params:
+
+        - name: url
+
+          value: git@github.ford.com:Pro-Tech/gbms-service-finmapping.git
+
+        - name: revision
+
+          value: $(params.GIT_HEAD_SHA)
+
+      workspaces:
+
+        - name: output
+
+          workspace: source-analysis
+
+    - name: gradle-build
+
+      taskRef:
+
+        name: gbms-sdt-gradlew-jfrog
+
+      params:
+
+        - name: params
+
+          value: build shadowJar
+
+      runAfter:
+
+        - clone-repo
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+    - name: audit-scan
+
+      taskRef:
+
+        name: gbms-sdt-42crunch-audit-scan
+
+      params:
+
+        - name: conformance-scan-credentials
+
+          value: conformance-scan-credentials-gbms-service-finmapping
+
+        - name: api-id
+
+          value: b0912401-fc17-4934-872e-39c183432023
+
+      runAfter:
+
+        - gradle-build
+
+    - name: release
+
+      taskRef:
+
+        name: gbms-sdt-semantic-release
+
+      when:
+
+        - input: $(params.branch)
+
+          operator: in
+
+          values:
+
+            - refs/heads/finmap
+
+      runAfter:
+
+        - audit-scan
+
+        - fossa
+
+        - checkmarx
+
+      params:
+
+        - name: flags
+
+          value: "--verbose"
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+    - name: gcp-auth
+
+      taskRef:
+
+        name: gbms-sdt-wif-openshift
+
+      params:
+
+        - name: GCP_SECRET_NAME
+
+          value: "google-creds-dev"
+
+      runAfter:
+
+        - release
+
+    - name: build-docker-image
+
+      taskRef:
+
+        name: gbms-sdt-buildah-gar
+
+      params:
+
+        - name: IMAGE
+
+          value: "gbms-service-finmapping-image"
+
+        - name: IMAGE_TAG
+
+          value: "v$(tasks.release.results.RELEASE_VERSION)"
+
+        - name: GAR_PATH
+
+          value: "$(params.gar)"
+
+        - name: OAUTH2_TOKEN
+
+          value: "$(tasks.gcp-auth.results.ACCESS_TOKEN)"
+
+        - name: registry-write-secret
+
+          value: registry-write-secret
+
+        - name: DOCKERFILE
+
+          value: "./Dockerfile"
+
+      runAfter:
+
+        - gcp-auth
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+    - name: fossa
+
+      taskRef:
+
+        name: gbms-sdt-fossa-task
+
+      params:
+
+        - name: projectName
+
+          value: gbms-service-finmapping
+
+        - name: teamName
+
+          value: GBMS-NG-23367
+
+        - name: fossaCreds
+
+          value: sdt-fossa-api-key
+
+        - name: branch
+
+          value: $(params.branch)
+
+        - name: breakBuildOnFailure
+
+          value: "false"
+
+      runAfter:
+
+        - sonarqube
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+    - name: sonarqube
+
+      taskRef:
+
+        name: gbms-sdt-sonarqube-scanner
+
+      params:
+
+        - name: SONAR_HOST_URL
+
+          value: https://www.sonarqube.ford.com
+
+        - name: SONAR_PROJECT_KEY
+
+          value: com.ford.gbms:gbms-finmapping-handler
+
+        - name: flags
+
+          value:
+
+            - "-X"
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+      runAfter:
+
+        - gradle-build
+
+    - name: checkmarx
+
+      taskRef:
+
+        name: gbms-sdt-checkmarx
+
+      params:
+
+        - name: projectName
+
+          value: \CxServer\Ford Enterprise\Ford Pro\GBMSNG\gbms-service-finmapping
+
+      runAfter:
+
+        - clone-repo-analysis
+
+      workspaces:
+
+        - name: source
+
+          workspace: source-analysis
+
+    - name: trigger-cd
+
+      when:
+
+        - input: $(params.branch)
+
+          operator: in
+
+          values:
+
+            - refs/heads/finmap
+
+      params:
+
+        - name: revision
+
+          value: v$(tasks.release.results.RELEASE_VERSION)
+
+      taskSpec:
+
+        params:
+
+          - name: revision
+
+        steps:
+
+          - name: trigger-deploy
+
+            image: registry.ford.com/pro-tech-software-delivery-toolset/debian-debug:latest
+
+            resources:
+
+              requests:
+
+                cpu: "0.25"
+
+                memory: "256Mi"
+
+              limits:
+
+                cpu: "0.25"
+
+                memory: "256Mi"
+
+            env:
+
+              - name: revision
+
+                value: $(params.revision)
+
+              - name: HOME
+
+                value: $(workspaces.source.path)
+
+            script: |
+
+              #/bin/bash
+
+              echo "deploying to dev"
+
+             
+
+              echo $revision
+
+ 
+
+              cd $HOME
+
+              kubectl apply -f .pipelines/cd.yaml
+
+              EXIT_CODE=0
+
+              tkn pr delete gbms-service-finmapping-cd-run || EXIT_CODE=$?
+
+              echo "tkn cleanup result: $EXIT_CODE"
+
+             
+
+              sed -i "s/||RELEASE_VERSION||/${revision}/" .pipelines/cd-run.yaml
+
+              sed -i "s/||ENVIRONMENT||/dev/" .pipelines/cd-run.yaml
+
+              sed -i "s/||APIGEE_ENV||/pre-prod/" .pipelines/cd-run.yaml
+
+              sed -i "s/||GCP_PROJECT_ID||/ford-98c7a7c4ae422d8715b5e5fd/" .pipelines/cd-run.yaml
+
+ 
+
+              kubectl apply -f .pipelines/cd-run.yaml
+
+        workspaces:
+
+          - name: source
+
+      runAfter:
+
+        - build-docker-image
+
+      workspaces:
+
+        - name: source
+
+          workspace: source
+
+  workspaces:
+
+    - name: source
+
+      description: A workspace to hold the cloned repo
+
+    - name: source-analysis
+
+      description: A workspace to hold the cloned repo

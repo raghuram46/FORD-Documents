@@ -1,0 +1,133 @@
+spring:
+  datasource:
+    url: ${GBMS_DBURL}
+    username: ${GBMS_DBUSER}
+
+    password: ${GBMS_DBPASSWORD}
+
+    driverClassName: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    hikari:
+      poolName: HikariCP
+      minimumIdle: 10
+      maximumPoolSize: 100
+      idleTimeout: 30000
+      maxLifetime: 2000000
+      connectionTimeout: 30000
+  jpa:
+    show-sql: true
+  cloud:
+    gcp:
+      common:
+        project-id: ${COMMON_PROJECT_ID}
+        project-number: ${COMMON_PROJECT_NUMBER}
+      psa:
+        project-id: ${PSA_PROJECT_ID}
+        project-number: ${PSA_PROJECT_NUMBER}
+      sql:
+        database-name: gbms
+        enable-iam-auth: true
+        enabled: true
+        instance-connection-name: ${instanceName}
+        ip-types: PRIVATE
+  main:
+    allow-bean-definition-overriding: true # required
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+springdoc:
+  api-docs:
+    enabled: true
+    path: /api-docs
+  paths-to-match: /api/**
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui
+
+# Swagger
+swagger:
+  title: GBMS Manage Fin Mapping Service
+  description: This service is used to manage Fin Mapping functionality
+  contactName: rgavinol
+  contactEmail: rgavinol@ford.com
+  licenseName: Ford License
+  version: '@gradle.properties.version@'
+  serverUrl: https://api.d01i.gcp.ford.com/pro/govdeals/finmappingservice
+  tokenUrl: https://login.microsoftonline.com/azureford.onmicrosoft.com/oauth2/v2.0/token
+  scope: 4bb0c26d-6ca5-42bb-b7da-388700170f53/.default
+
+instanceName: ${PSA_PROJECT_ID}:us-central1:gbms-pgsql-db
+####################################################################################################
+# !!! IMPORTANT !!! This section changes per environment, see prod configuration in comments.
+####################################################################################################
+iamAuthBaseUrl: https://api.stg01e.gcp.ford.com/pro/auth # PROD: https://api.pd01e.gcp.ford.com/pro/auth
+iamRolesBaseUrl: https://api.stg01e.gcp.ford.com/pro/roles # PROD: https://api.pd01e.gcp.ford.com/pro/roles
+ffmIssuer: https://fleetaccount-stage.ford.com # PROD: https://FleetAccount.ford.com/account-api
+
+# add the following to enable logging
+logging:
+  level:
+    com.ford.pro.auth: DEBUG
+
+ford-pro:
+  auth:
+    inject-filter: true # this injects a basic SecurityFilterChain that will secure all requests
+    unsecured-urls: '/api-docs/**,/swagger-ui/**'
+    token:
+      authorization:
+        roleResolverUrl: ${iamRolesBaseUrl}/v2/resolve-role
+      validation:
+        issuers:
+          - ${ffmIssuer}
+        configUrl:
+          - ${iamAuthBaseUrl}/v1/.well-known/openid-configuration
+        applicationIds:
+          #- <insert your application id here>
+          - 36a9670a-60c6-430f-8a8d-d2c809bedcac
+          - 566c19b3-7b9c-4e1d-be13-0cd01eb18b95 # internal admin application id
+          - dfc7bb0a-649d-4873-9368-00aef0e7024d # external admin application id
+          - c9dec19f-4530-41c0-a477-4524c5c10a97 # ford pro application id
+      extraction: # 'extraction.access-token-header' tells the interceptor where to look for the token.
+        access-token-header: x-forwarded-authorization # we expect the token to be in the 'x-forwarded-authorization' header
+    user-detail:
+      cache-time-in-minutes: 5
+      cache-size: 100
+
+file:
+  upload:
+    project-id: ford-98c7a7c4ae422d8715b5e5fd
+    receive:
+      bucket-name: gbms-uploaded-documents
+
+#############
+# Client Information - EDMS
+#############
+client:
+  edms:
+    username: ${EDMS_USERNAME}
+    password: ${EDMS_PASSWORD}
+    docbase: ${EDMS_DOCBASE}
+    endUserForProxyId: ${EDMS_ENDUSER_PROXY_ID}
+    default:
+      owner:
+        name: srajku27
+      gis:
+        number: 07.07
+    create:
+      path:
+        url: ${EDMS_CREATE_URL}
+    getcontent:
+      path:
+        url: ${EDMS_GET_URL}
+    delete:
+      path:
+        url: ${EDMS_DELETE_URL}
+    tokenurl: https://corpqa.sts.ford.com/adfs/oauth2/token
+    clientid: ${EDMS_CLIENT_ID}
+    secret: ${EDMS_CLIENT_SECRET}
+    resource: ${EDMS_RESOURCE}
+    redirect.uri: ${EDMS_REDIRECT_URL}
+    token:
+      live-span-config: 86400
+
+ 

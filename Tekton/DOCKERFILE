@@ -1,0 +1,15 @@
+FROM registry.ford.com/golden/java-otel:17.0.12
+
+ 
+
+COPY ./src/main/resources/test.txt src/main/resources/test.txt
+
+COPY ./src/main/resources/templates/GBMS_FIN_Mapping_upload_Template.xlsx src/main/resources/templates/GBMS_FIN_Mapping_upload_Template.xlsx
+
+ 
+
+COPY ./build/libs/gbms-service-finmapping.jar /gbms-service-finmapping.jar
+
+ 
+
+ENTRYPOINT ["java", "-jar", "/gbms-service-finmapping.jar"]

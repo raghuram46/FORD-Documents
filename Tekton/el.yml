@@ -1,0 +1,329 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+
+kind: EventListener
+
+metadata:
+
+  name: gbms-service-finmapping
+
+  namespace:
+
+spec:
+
+  serviceAccountName: pipeline
+
+  triggers:
+
+    - name: github-push
+
+      interceptors:
+
+        - github:
+
+            eventTypes:
+
+              - push
+
+            secretRef:
+
+              secretKey: secretToken
+
+              secretName: github-hook-secret
+
+        - name: "only main pushes"
+
+          ref:
+
+            name: "cel"
+
+          params:
+
+            - name: "filter"
+
+              value: "body.ref =='refs/heads/master'"
+
+      bindings:
+
+        - ref: "gbms-service-finmapping-tb"
+
+      template:
+
+        ref: "gbms-service-finmapping-tt"
+
+---
+
+apiVersion: route.openshift.io/v1
+
+kind: Route
+
+metadata:
+
+  name: "gbms-service-finmapping-webhook"
+
+  namespace:
+
+spec:
+
+  port:
+
+    targetPort: http-listener
+
+  to:
+
+    kind: Service
+
+    name: el-gbms-service-finmapping
+
+    weight: 100
+
+  tls:
+
+    insecureEdgeTerminationPolicy: Redirect
+
+    termination: edge
+
+---
+
+apiVersion: triggers.tekton.dev/v1alpha1
+
+kind: TriggerBinding
+
+metadata:
+
+  labels:
+
+    app: gbms-service-finmapping
+
+  name: "gbms-service-finmapping-tb"
+
+spec:
+
+  params:
+
+    - name: GIT_SSH_URL
+
+      value: $(body.repository.ssh_url)
+
+    - name: GIT_CLONE_URL
+
+      value: $(body.repository.clone_url)
+
+    - name: GIT_ORGANIZATION
+
+      value: $(body.repository.owner.login)
+
+    - name: GIT_REPOSITORY
+
+      value: $(body.repository.name)
+
+    - name: GIT_HEAD_SHA
+
+      value: $(body.head_commit.id)
+
+    - name: GIT_REPO_FULLNAME
+
+      value: $(body.repository.full_name)
+
+    - name: GIT_EVENT
+
+      value: $(header.X-GitHub-Event)
+
+    - name: GIT_BASE_SHA
+
+      value: $(body.before)
+
+    - name: GIT_DELIVERY_ID
+
+      value: $(header.X-GitHub-Delivery)
+
+    - name: GIT_PR_NUMBER
+
+      value: "-1"
+
+    - name: GIT_USER
+
+      value: $(body.sender.login)
+
+    - name: GIT_REF
+
+      value: $(body.ref)
+
+    - name: GIT_COMMENT
+
+      value: ""
+
+    - name: GIT_REFSPEC
+
+      value: +refs/heads/master:refs/heads/master
+
+    - name: GIT_STATUSES_URL
+
+      value: $(body.repository.statuses_url)
+
+---
+
+apiVersion: triggers.tekton.dev/v1alpha1
+
+kind: TriggerTemplate
+
+metadata:
+
+  name: "gbms-service-finmapping-tt"
+
+spec:
+
+  params:
+
+    - name: GIT_SSH_URL
+
+    - name: GIT_CLONE_URL
+
+    - name: GIT_ORGANIZATION
+
+    - name: GIT_REPOSITORY
+
+    - name: GIT_HEAD_SHA
+
+    - name: GIT_REPO_FULLNAME
+
+    - name: GIT_EVENT
+
+    - name: GIT_BASE_SHA
+
+    - name: GIT_DELIVERY_ID
+
+    - name: GIT_PR_NUMBER
+
+    - name: GIT_USER
+
+    - name: GIT_REF
+
+    - name: GIT_COMMENT
+
+    - name: GIT_REFSPEC
+
+    - name: GIT_STATUSES_URL
+
+  resourcetemplates:
+
+    - apiVersion: tekton.dev/v1beta1
+
+      kind: TaskRun
+
+      metadata:
+
+        generateName: trigger-gbms-service-finmapping-ci-
+
+      spec:
+
+        taskSpec:
+
+          steps:
+
+            - env:
+
+                - name: GIT_REF
+
+                  value: $(tt.params.GIT_REF)
+
+                - name: GIT_REPO_FULLNAME
+
+                  value: $(tt.params.GIT_REPO_FULLNAME)
+
+                - name: GIT_HEAD_SHA
+
+                  value: $(tt.params.GIT_HEAD_SHA)
+
+                - name: GIT_STATUSES_URL
+
+                  value: $(tt.params.GIT_STATUSES_URL)
+
+                - name: GIT_PR_NUMBER
+
+                  value: $(tt.params.GIT_PR_NUMBER)
+
+                - name: GITHUB_TOKEN
+
+                  valueFrom:
+
+                    secretKeyRef:
+
+                      key: password
+
+                      name: github-https
+
+              name: kubectl
+
+              image: registry.ford.com/pro-tech-software-delivery-toolset/debian-debug:latest
+
+              script: |
+
+                #!/bin/bash
+
+                set -e
+
+ 
+
+                ciurl=https://github.ford.com/api/v3/repos/${GIT_REPO_FULLNAME}/contents/.pipelines/ci.yaml?ref=${GIT_HEAD_SHA}
+
+                cirurl=https://github.ford.com/api/v3/repos/${GIT_REPO_FULLNAME}/contents/.pipelines/ci-run.yaml?ref=${GIT_HEAD_SHA}
+
+                cdurl=https://github.ford.com/api/v3/repos/${GIT_REPO_FULLNAME}/contents/.pipelines/cd.yaml?ref=${GIT_HEAD_SHA}
+
+                prourl=https://github.ford.com/api/v3/repos/${GIT_REPO_FULLNAME}/contents/.pipelines/cd-promotion.yaml?ref=${GIT_HEAD_SHA}
+
+ 
+
+                echo $ciurl
+
+                echo $cirurl
+
+                echo $cdurl
+
+                echo $prourl
+
+               
+
+               
+
+                curl -H "Authorization: token $(echo $GITHUB_TOKEN | tr -d '[:space:]')" -H 'Accept: application/vnd.github.v3.raw' $ciurl -o ci.yaml --http1.1
+
+                curl -H "Authorization: token $(echo $GITHUB_TOKEN | tr -d '[:space:]')" -H 'Accept: application/vnd.github.v3.raw' $cirurl -o ci-run.yaml --http1.1
+
+                curl -H "Authorization: token $(echo $GITHUB_TOKEN | tr -d '[:space:]')" -H 'Accept: application/vnd.github.v3.raw' $cdurl -o cd.yaml --http1.1
+
+                curl -H "Authorization: token $(echo $GITHUB_TOKEN | tr -d '[:space:]')" -H 'Accept: application/vnd.github.v3.raw' $prourl -o cd-promotion.yaml --http1.1
+
+ 
+
+                head ci.yaml
+
+ 
+
+                kubectl apply -f ci.yaml
+
+                kubectl apply -f cd.yaml
+
+                kubectl apply -f cd-promotion.yaml
+
+               
+
+                sed -i "s~||GIT_HEAD_SHA||~${GIT_HEAD_SHA}~" ci-run.yaml
+
+               
+
+                sed -i "s~||GIT_REF||~${GIT_REF}~" ci-run.yaml
+
+               
+
+                sed -i "s~||uid||~${GIT_HEAD_SHA}~" ci-run.yaml
+
+               
+
+                kubectl create -f ci-run.yaml
+
+                echo "pipeline started"
+
+ 
+
+ 
